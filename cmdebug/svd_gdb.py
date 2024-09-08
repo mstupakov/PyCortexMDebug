@@ -130,18 +130,18 @@ class SVD(gdb.Command):
             else:
                 data = "(not readable)"
             desc = re.sub(r'\s+', ' ', r.description)
-            reg_list.append((r.name, data, desc))
+            reg_list.append((r.name, data, desc, r.address()))
 
         column1_width = max(len(reg[0]) for reg in reg_list) + 2  # padding
         column2_width = max(len(reg[1]) for reg in reg_list)
         for reg in reg_list:
-            gdb.write("\t{}:{}{}".format(reg[0], "".ljust(column1_width - len(reg[0])), reg[1].rjust(column2_width)))
+            gdb.write("\t[{:08x}]   {}:{}{}".format(reg[3], reg[0], "".ljust(column1_width - len(reg[0])), reg[1].rjust(column2_width)))
             if reg[2] != reg[0]:
                 gdb.write("  {}".format(reg[2]))
             gdb.write("\n")
 
     def _print_register_fields(self, container_name, form, register):
-        gdb.write("Fields in {}:\n".format(container_name))
+        gdb.write("Fields in {}[{:08x}]:\n".format(container_name, register.address()))
         fields = register.fields
         if len(fields) == 0:
             return
@@ -169,19 +169,23 @@ class SVD(gdb.Command):
                     val = self.format(val, form, f.width)
             else:
                 val = "(not readable)"
-            field_list.append((f.name, val, desc))
+            field_list.append((f.name, val, desc, f.offset, f.width))
 
         column1_width = max(len(field[0]) for field in field_list) + 2  # padding
         column2_width = max(len(field[1]) for field in field_list)  # padding
         for field in field_list:
             gdb.write(
-                "\t{}:{}{}".format(field[0], "".ljust(column1_width - len(field[0])), field[1].rjust(column2_width)))
+                    "\t[{:02d}:{:02d}]   {}:{}{}".format(field[3] + field[4] - 1, field[3], field[0], "".ljust(column1_width - len(field[0])), field[1].rjust(column2_width)))
             if field[2] != field[0]:
                 gdb.write("  {}".format(field[2]))
             gdb.write("\n")
 
     def invoke(self, args, from_tty):
-        s = str(args).split(" ")
+        s = str(args).split()
+
+        if not len(s):
+            s.append("")
+
         form = ""
         if s[0] and s[0][0] == '/':
             if len(s[0]) == 1:
@@ -223,7 +227,7 @@ class SVD(gdb.Command):
                 peripherals = self.svd_file.peripherals.values()
             for p in peripherals:
                 desc = re.sub(r'\s+', ' ', p.description)
-                gdb.write("\t{}:{}{}\n".format(p.name, "".ljust(column_width - len(p.name)), desc))
+                gdb.write("\t[{:08x}]   {}:{}{}\n".format(p.base_address, p.name, "".ljust(column_width - len(p.name)), desc))
             return
 
         def warn_if_ambiguous(smart_dict, key):
